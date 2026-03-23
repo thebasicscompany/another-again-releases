@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       installation_id:
-        description: Customer GitHub App installation id (read private app repo)
+        description: Customer GitHub App installation id (for traceability; token uses owner/repo below)
         required: true
         type: string
       customer_repo:
@@ -40,13 +40,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      # create-github-app-token@v1 does NOT accept installation-id as input; without owner/repos it
+      # defaults to THIS repo (thebasicscompany/*-releases) and cannot read the customer's private repo.
+      - name: Parse customer_repo (owner + name)
+        id: customer
+        shell: bash
+        run: |
+          full='${{ github.event.inputs.customer_repo }}'
+          if [[ "$full" != */* ]]; then
+            echo "::error::customer_repo must be owner/repo (e.g. imcertain101/basics-os-slug)"
+            exit 1
+          fi
+          echo "owner=${full%%/*}" >> "$GITHUB_OUTPUT"
+          echo "name=${full#*/}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub App token (read customer private repo)
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ vars.HOSTING_GITHUB_APP_ID }}
           private-key: ${{ secrets.HOSTING_GITHUB_APP_PRIVATE_KEY }}
-          installation-id: ${{ github.event.inputs.installation_id }}
+          owner: ${{ steps.customer.outputs.owner }}
+          repositories: ${{ steps.customer.outputs.name }}
 
       - uses: actions/checkout@v4
         with:
